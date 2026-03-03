@@ -57,6 +57,33 @@ The `TS24` class inherits from `Channel` and `ConfigurableModule`.
 1. **Delta Rendering**: The `render_ui()` function maintains a local cache of the last machine state and coordinates. It only pushes pixel data to the display when a significant change (e.g., >0.01mm movement) is detected.
 2. **Core Affinity**: By pinning the `ui_task` to Core 0, the CPU cycles required for font rendering and SPI transmission are kept away from the `Stepper` and `Planner` tasks, preventing potential step-loss or jitter.
 
+## Building and Deployment
+
+To build and deploy the FluidNC firmware with TS24 support, follow these steps:
+
+### 1. Build the Firmware
+Using the PlatformIO CLI, run the following command to build the project for your specific environment (e.g., `wifi`):
+
+```bash
+pio run -e wifi
+```
+
+### 2. Upload to ESP32
+Connect your ESP32 controller to your computer via USB and run:
+
+```bash
+pio run -e wifi -t upload
+```
+
+### 3. (Optional) Monitor Output
+To view serial logs for debugging, run:
+
+```bash
+pio run -e wifi -t monitor
+```
+
+---
+
 ## Developer Notes
 - **Font**: Uses a lean 5x7 GLCD bitmapped font for maximum speed and minimal memory footprint.
 - **Coordinate Mapping**: The touch controller is pre-calibrated for standard 320x240 orientation. If your touch is inverted, coordinate scaling in `handle_touch()` may need adjustment.
