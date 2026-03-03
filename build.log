@@ -1,0 +1,86 @@
+Processing wifi (board: esp32dev; platform: https://github.com/platformio/platform-espressif32.git; framework: arduino)
+--------------------------------------------------------------------------------
+Verbose mode can be enabled via `-v, --verbose` option
+CONFIGURATION: https://docs.platformio.org/page/boards/espressif32/esp32dev.html
+PLATFORM: Espressif 32 (6.13.0+sha.4ed1943) > Espressif ESP32 Dev Module
+HARDWARE: ESP32 240MHz, 320KB RAM, 4MB Flash
+DEBUG: Current (cmsis-dap) External (cmsis-dap, esp-bridge, esp-prog, iot-bus-jtag, jlink, minimodule, olimex-arm-usb-ocd, olimex-arm-usb-ocd-h, olimex-arm-usb-tiny-h, olimex-jtag-tiny, tumpa)
+PACKAGES: 
+ - framework-arduinoespressif32 @ 3.20017.241212+sha.dcc1105b 
+ - tool-esptoolpy @ 2.41100.0 (4.11.0) 
+ - toolchain-xtensa-esp32 @ 8.4.0+2021r2-patch5
+LDF: Library Dependency Finder -> https://bit.ly/configure-pio-ldf
+LDF Modes: Finder ~ chain, Compatibility ~ soft
+Found 37 compatible libraries
+Scanning dependencies...
+Dependency Graph
+|-- TMCStepper @ 0.7.3
+|-- ESP8266 and ESP32 OLED driver for SSD1306 displays @ 4.4.1
+|-- AsyncTCP @ 3.4.10
+|-- ESPAsyncWebServer @ 3.9.5+sha.07f8a6c
+|-- Wire @ 2.0.0
+|-- FS @ 2.0.0
+|-- WiFi @ 2.0.0
+|-- WiFiClientSecure @ 2.0.0
+|-- ArduinoOTA @ 2.0.0
+|-- DNSServer @ 2.0.0
+|-- Update @ 2.0.0
+Building in release mode
+Compiling .pio\build\wifi\src\TS24.cpp.o
+Compiling .pio\build\wifi\src\XPT2046.cpp.o
+Compiling .pio\build\wifi\src\lineedit.cpp.o
+Compiling .pio\build\wifi\src\string_util.cpp.o
+Compiling .pio\build\wifi\src\version.cpp.o
+Compiling .pio\build\wifi\src\xmodem.cpp.o
+Building .pio\build\wifi\bootloader.bin
+Generating partitions .pio\build\wifi\partitions.bin
+Compiling .pio\build\wifi\libec7\SPI\SPI.cpp.o
+esptool.py v4.11.0
+Creating esp32 image...
+Merged 1 ELF section
+Successfully created esp32 image.
+Compiling .pio\build\wifi\lib609\TMCStepper\source\CHOPCONF.cpp.o
+Compiling .pio\build\wifi\lib609\TMCStepper\source\COOLCONF.cpp.o
+Compiling .pio\build\wifi\lib609\TMCStepper\source\DRVCONF.cpp.o
+Compiling .pio\build\wifi\lib609\TMCStepper\source\DRVCTRL.cpp.o
+Compiling .pio\build\wifi\lib609\TMCStepper\source\DRVSTATUS.cpp.o
+Compiling .pio\build\wifi\lib609\TMCStepper\source\DRV_CONF.cpp.o
+Compiling .pio\build\wifi\lib609\TMCStepper\source\DRV_STATUS.cpp.o
+Compiling .pio\build\wifi\lib609\TMCStepper\source\ENCMODE.cpp.o
+Compiling .pio\build\wifi\lib609\TMCStepper\source\GCONF.cpp.o
+Compiling .pio\build\wifi\lib609\TMCStepper\source\IHOLD_IRUN.cpp.o
+Compiling .pio\build\wifi\lib609\TMCStepper\source\PWMCONF.cpp.o
+Compiling .pio\build\wifi\lib609\TMCStepper\source\RAMP_STAT.cpp.o
+FluidNC/src/TS24.cpp: In member function 'void TS24::handle_touch()':
+FluidNC/src/TS24.cpp:159:48: error: cannot call member function 'void Channel::push(const string&)' without object
+             InputFile::push(std::string("$H\n"));
+                                                ^
+FluidNC/src/TS24.cpp:161:48: error: cannot call member function 'void Channel::push(const string&)' without object
+             InputFile::push(std::string("\x85")); // Jog Cancel / Feedhold
+                                                ^
+FluidNC/src/TS24.cpp:165:58: error: cannot call member function 'void Channel::push(const string&)' without object
+         InputFile::push(std::string("G10 L20 P1 X0 Y0\n"));
+                                                          ^
+FluidNC/src/TS24.cpp:168:55: error: cannot call member function 'void Channel::push(const string&)' without object
+         InputFile::push(std::string("G10 L20 P1 Z0\n"));
+                                                       ^
+FluidNC/src/TS24.cpp: In function 'void ui_task(void*)':
+FluidNC/src/TS24.cpp:179:28: error: 'void TS24::handle_touch()' is private within this context
+         ts24->handle_touch();
+                            ^
+FluidNC/src/TS24.cpp:142:6: note: declared private here
+ void TS24::handle_touch() {
+      ^~~~
+FluidNC/src/TS24.cpp: At global scope:
+FluidNC/src/TS24.cpp:190:1: error: 'ChannelFactory' does not name a type; did you mean 'UartFactory'?
+ ChannelFactory::InstanceBuilder<TS24> ts24_channel __attribute__((init_priority(105))) ("ts24");
+ ^~~~~~~~~~~~~~
+ UartFactory
+Compiling .pio\build\wifi\lib609\TMCStepper\source\SERIAL_SWITCH.cpp.o
+*** [.pio\build\wifi\src\TS24.cpp.o] Error 1
+========================= [FAILED] Took 10.27 seconds =========================
+
+Environment    Status    Duration
+-------------  --------  ------------
+wifi           FAILED    00:00:10.274
+==================== 1 failed, 0 succeeded in 00:00:10.274 ====================

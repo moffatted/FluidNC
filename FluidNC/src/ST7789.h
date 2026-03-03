@@ -19,7 +19,8 @@ public:
     void fillScreen(uint16_t color);
     void drawRect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t color);
     void fillRect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t color);
-    
+    void drawPixel(uint16_t x, uint16_t y, uint16_t color);
+
     // Very basic text rendering
     void setTextColor(uint16_t color, uint16_t bg);
     void drawChar(uint16_t x, uint16_t y, char c);
@@ -41,13 +42,13 @@ public:
 
 private:
     spi_device_handle_t _spi;
-    pinnum_t _cs_pin;
-    pinnum_t _dc_pin;
-    pinnum_t _reset_pin;
-    pinnum_t _backlight_pin;
+    pinnum_t            _cs_pin;
+    pinnum_t            _dc_pin;
+    pinnum_t            _reset_pin;
+    pinnum_t            _backlight_pin;
 
-    uint16_t _fg_color = WHITE;
-    uint16_t _bg_color = BLACK;
+    uint16_t _fg_color  = WHITE;
+    uint16_t _bg_color  = BLACK;
     uint8_t  _text_size = 1;
 
     void sendCommand(uint8_t cmd);

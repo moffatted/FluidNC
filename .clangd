@@ -1,0 +1,16 @@
+CompileFlags:
+  CompilationDatabase: "."
+  Add:
+    - "-xc++"
+    # This allows clangd to query your actual ESP32 compiler for system headers
+    - "--query-driver=**/*g++*"
+  Remove:
+    # These flags are for GCC/Xtensa and cause Clang to error out
+    - "-fno-tree-switch-conversion"
+    - "-mtext-section-literals"
+    - "-fstrict-volatile-bitfields"
+    - "-mlongcalls"
+    - "-fno-section-anchors"
+
+Index:
+  Background: Build # Allows clangd to index in the background for better "Go to Definition"
