@@ -22,12 +22,7 @@ void TS24::init() {
         return;
     }
 
-    pinnum_t cs  = _cs_pin.defined() ? _cs_pin.getNative(Pin::Capabilities::Output) : 255;
-    pinnum_t dc  = _dc_pin.defined() ? _dc_pin.getNative(Pin::Capabilities::Output) : 255;
-    pinnum_t rst = _reset_pin.defined() ? _reset_pin.getNative(Pin::Capabilities::Output) : 255;
-    pinnum_t bl  = _backlight_pin.defined() ? _backlight_pin.getNative(Pin::Capabilities::Output) : 255;
-
-    if (!_display->init(cs, dc, rst, bl)) {
+    if (!_display->init(&_cs_pin, &_dc_pin, &_reset_pin, &_backlight_pin)) {
         log_error("Failed to init ST7789 display");
         return;
     }
@@ -158,68 +153,94 @@ void TS24::render_ui() {
     prev_state = _last_state;
     memcpy(prev_mpos, _last_mpos, sizeof(prev_mpos));
 
-    // Top Bar (DRO)
-    _display->fillRect(0, 0, 320, 40, ST7789::BLUE);
-    _display->setTextColor(ST7789::WHITE, ST7789::BLUE);
-    _display->drawString(10, 12, ("State: " + _last_state).c_str(), 2);
+    // Clear entire screen on first render to eliminate any init artifacts
+    static bool first_render = true;
+    if (first_render) {
+        _display->fillScreen(ST7789::BLACK);
+        first_render = false;
+    }
 
-    // Coordinate Display
-    _display->fillRect(0, 40, 320, 40, ST7789::BLACK);
-    _display->setTextColor(ST7789::WHITE, ST7789::BLACK);
+    // Layout for 320x240 (MKS TS24-R)
+    // MADCTL 0x68: Y=0 at physical BOTTOM, Y=239 at physical TOP
+    const uint16_t W = 320;
+    const uint16_t H = 240;
+
+    // --- Header: State (physical top = high Y) ---
+    _display->fillRect(0, 210, W, 30, ST7789::BLUE);
+    _display->setTextColor(ST7789::WHITE, ST7789::BLUE);
+    std::string state_str = _last_state.empty() ? "Idle" : _last_state;
+    _display->drawString(8, 217, state_str.c_str(), 2);
+
+    // --- Coord bar (below header = slightly lower Y) ---
+    _display->fillRect(0, 182, W, 28, ST7789::BLACK);
+    _display->setTextColor(ST7789::GREEN, ST7789::BLACK);
     char pos_buf[64];
     snprintf(pos_buf, sizeof(pos_buf), "X:%.2f Y:%.2f Z:%.2f", _last_mpos[0], _last_mpos[1], _last_mpos[2]);
-    _display->drawString(10, 50, pos_buf, 2);
+    _display->drawString(5, 192, pos_buf, 1);
 
-    // Jog Controls Grid
-    int btn_w = 60;
-    int btn_h = 50;
+    // --- Jog buttons ---
+    const uint16_t BTN_W = 60;
+    const uint16_t BTN_H = 35;
+    const uint16_t COL1  = 5;    // X- column
+    const uint16_t COL2  = 70;   // Center column (Y+/Y-)
+    const uint16_t COL3  = 135;  // X+ column
+    const uint16_t ZCOL  = 220;  // Z column
+
+    // High Y = physical top of jog area
+    const uint16_t ROW_YP = 141;  // Y+ row (physical top)
+    const uint16_t ROW_X  = 101;  // X-/X+ row (physical middle)
+    const uint16_t ROW_YM = 61;   // Y- row (physical bottom)
 
     // Y+
-    _display->fillRect(60, 90, btn_w, btn_h, ST7789::GRAY);
+    _display->fillRect(COL2, ROW_YP, BTN_W, BTN_H, ST7789::GRAY);
     _display->setTextColor(ST7789::WHITE, ST7789::GRAY);
-    _display->drawString(80, 105, "Y+", 2);
+    _display->drawString(COL2 + 18, ROW_YP + 10, "Y+", 2);
 
     // X-
-    _display->fillRect(0, 140, btn_w, btn_h, ST7789::GRAY);
-    _display->drawString(20, 155, "X-", 2);
+    _display->fillRect(COL1, ROW_X, BTN_W, BTN_H, ST7789::GRAY);
+    _display->drawString(COL1 + 18, ROW_X + 10, "X-", 2);
 
     // X+
-    _display->fillRect(120, 140, btn_w, btn_h, ST7789::GRAY);
-    _display->drawString(140, 155, "X+", 2);
+    _display->fillRect(COL3, ROW_X, BTN_W, BTN_H, ST7789::GRAY);
+    _display->drawString(COL3 + 18, ROW_X + 10, "X+", 2);
 
     // Y-
-    _display->fillRect(60, 190, btn_w, btn_h, ST7789::GRAY);
-    _display->drawString(80, 205, "Y-", 2);
+    _display->fillRect(COL2, ROW_YM, BTN_W, BTN_H, ST7789::GRAY);
+    _display->drawString(COL2 + 18, ROW_YM + 10, "Y-", 2);
 
-    // Z Controls
-    _display->fillRect(200, 90, btn_w, btn_h, ST7789::GRAY);  // Z+
-    _display->drawString(220, 105, "Z+", 2);
-    _display->fillRect(200, 190, btn_w, btn_h, ST7789::GRAY);  // Z-
-    _display->drawString(220, 205, "Z-", 2);
+    // --- Z controls (right side) ---
+    _display->fillRect(ZCOL, ROW_YP, BTN_W, BTN_H, 0x0578);  // Teal
+    _display->setTextColor(ST7789::WHITE, 0x0578);
+    _display->drawString(ZCOL + 18, ROW_YP + 10, "Z+", 2);
 
-    // Zero Controls
-    _display->fillRect(260, 90, btn_w, btn_h, ST7789::CYAN);  // Zero XY
+    _display->fillRect(ZCOL, ROW_YM, BTN_W, BTN_H, 0x0578);
+    _display->drawString(ZCOL + 18, ROW_YM + 10, "Z-", 2);
+
+    // Zero XY (physically above Zero Z = higher Y)
+    _display->fillRect(ZCOL, ROW_X + BTN_H / 2, BTN_W, BTN_H / 2 - 2, ST7789::CYAN);
     _display->setTextColor(ST7789::BLACK, ST7789::CYAN);
-    _display->drawString(270, 105, "0XY", 1);
+    _display->drawString(ZCOL + 12, ROW_X + BTN_H / 2 + 3, "0 XY", 1);
 
-    _display->fillRect(260, 190, btn_w, btn_h, ST7789::CYAN);  // Zero Z
-    _display->drawString(270, 205, "0Z", 1);
+    // Zero Z (physically below Zero XY = lower Y)
+    _display->fillRect(ZCOL, ROW_X, BTN_W, BTN_H / 2 - 2, ST7789::YELLOW);
+    _display->setTextColor(ST7789::BLACK, ST7789::YELLOW);
+    _display->drawString(ZCOL + 15, ROW_X + 3, "0 Z", 1);
 
-    // Bottom Bar (Fixed buttons)
-    _display->fillRect(0, 240 - 40, 150, 40, ST7789::GREEN);  // HOME ALL
+    // --- Bottom bar (physical bottom = low Y) ---
+    _display->fillRect(0, 0, W / 2 - 3, 40, ST7789::GREEN);
     _display->setTextColor(ST7789::BLACK, ST7789::GREEN);
-    _display->drawString(20, 210, "HOME ALL", 2);
+    _display->drawString(20, 12, "HOME ALL", 2);
 
-    _display->fillRect(170, 240 - 40, 150, 40, ST7789::RED);  // STOP
+    _display->fillRect(W / 2 + 3, 0, W / 2 - 3, 40, ST7789::RED);
     _display->setTextColor(ST7789::WHITE, ST7789::RED);
-    _display->drawString(200, 210, "STOP", 2);
+    _display->drawString(W / 2 + 40, 12, "STOP", 2);
 }
 
 void TS24::handle_touch() {
     if (!_touch || !_touch->isTouched())
         return;
 
-    // Get point (Width, Height, Calibration MinX, MinY, MaxX, MaxY)
+    // Get point mapped to 320x240 display coordinates
     TouchPoint p = _touch->getPoint(320, 240, 200, 200, 3800, 3800);
 
     // A simple debouncer
@@ -228,36 +249,35 @@ void TS24::handle_touch() {
         return;
     last_touch = millis();
 
-    // Map Touch to Regions
+    // Bottom bar: y >= 200
     if (p.y >= 200) {
-        if (p.x < 150) {  // HOME ALL
+        if (p.x < 157) {  // HOME ALL
             push(std::string("$H\n"));
-        } else if (p.x > 170) {         // STOP
+        } else if (p.x >= 163) {        // STOP
             push(std::string("\x85"));  // Jog Cancel / Feedhold
         }
-    } else if (p.x >= 0 && p.x <= 180) {
-        // Jogging Area
-        if (p.y >= 90 && p.y <= 140 && p.x >= 60 && p.x <= 120) {  // Y+
+    }
+    // XY Jog area: x < 200, y 64..179
+    else if (p.x < 200 && p.y >= 64 && p.y < 180) {
+        if (p.y >= 64 && p.y < 99 && p.x >= 70 && p.x < 130) {  // Y+
             push(std::string("$J=G91 Y1 F1000\n"));
-        } else if (p.y >= 140 && p.y <= 190 && p.x >= 0 && p.x <= 60) {  // X-
+        } else if (p.y >= 104 && p.y < 139 && p.x >= 5 && p.x < 65) {  // X-
             push(std::string("$J=G91 X-1 F1000\n"));
-        } else if (p.y >= 140 && p.y <= 190 && p.x >= 120 && p.x <= 180) {  // X+
+        } else if (p.y >= 104 && p.y < 139 && p.x >= 135 && p.x < 195) {  // X+
             push(std::string("$J=G91 X1 F1000\n"));
-        } else if (p.y >= 190 && p.y <= 240 && p.x >= 60 && p.x <= 120) {  // Y-
+        } else if (p.y >= 144 && p.y < 179 && p.x >= 70 && p.x < 130) {  // Y-
             push(std::string("$J=G91 Y-1 F1000\n"));
         }
-    } else if (p.x >= 200 && p.x <= 260) {
-        // Z Jogging
-        if (p.y >= 90 && p.y <= 140) {  // Z+
+    }
+    // Z Jog area: x >= 220
+    else if (p.x >= 220 && p.x < 280) {
+        if (p.y >= 64 && p.y < 99) {  // Z+
             push(std::string("$J=G91 Z1 F500\n"));
-        } else if (p.y >= 190 && p.y <= 240) {  // Z-
+        } else if (p.y >= 144 && p.y < 179) {  // Z-
             push(std::string("$J=G91 Z-1 F500\n"));
-        }
-    } else if (p.x >= 260) {
-        // Zeroing
-        if (p.y >= 90 && p.y <= 140) {  // Zero XY
+        } else if (p.y >= 104 && p.y < 122) {  // Zero XY
             push(std::string("G10 L20 P1 X0 Y0\n"));
-        } else if (p.y >= 190 && p.y <= 240) {  // Zero Z
+        } else if (p.y >= 122 && p.y < 139) {  // Zero Z
             push(std::string("G10 L20 P1 Z0\n"));
         }
     }
@@ -266,12 +286,9 @@ void TS24::handle_touch() {
 static void ui_task(void* param) {
     TS24* ts24 = static_cast<TS24*>(param);
     while (true) {
-        // Polling loop. Refresh DRO every 200ms or so, process touch events.
         ts24->handle_touch();
-
-        // This is where we would conditionally call ts24->render_ui() if the _last_state changed.
-
-        vTaskDelay(pdMS_TO_TICKS(50));
+        ts24->render_ui();
+        vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
 

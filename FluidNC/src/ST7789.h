@@ -1,7 +1,7 @@
 #pragma once
 
 #include <stdint.h>
-#include "Pins/PinDetail.h"
+#include "Pin.h"
 #include "driver/spi_master.h"
 
 class ST7789 {
@@ -11,7 +11,7 @@ public:
 
     // Required pins: dc, cs, reset, backlight
     // MOSI, MISO, SCK are handled by Machine::SPIBus initialization
-    bool init(pinnum_t cs_pin, pinnum_t dc_pin, pinnum_t reset_pin, pinnum_t backlight_pin);
+    bool init(Pin* cs_pin, Pin* dc_pin, Pin* reset_pin, Pin* backlight_pin);
 
     void setAddrWindow(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1);
     void pushColors(uint16_t* data, uint32_t len);
@@ -28,6 +28,10 @@ public:
 
     static const uint16_t WIDTH  = 320;
     static const uint16_t HEIGHT = 240;
+    // ST7796 controller has 480x320 RAM; TS24 panel is 320x240.
+    // Offsets shift our drawing into the visible portion of the RAM.
+    static const uint16_t COL_OFFSET = 0;
+    static const uint16_t ROW_OFFSET = 0;
 
     // Common Colors (RGB565)
     static const uint16_t BLACK   = 0x0000;
@@ -42,10 +46,10 @@ public:
 
 private:
     spi_device_handle_t _spi;
-    pinnum_t            _cs_pin;
-    pinnum_t            _dc_pin;
-    pinnum_t            _reset_pin;
-    pinnum_t            _backlight_pin;
+    Pin*                _cs_pin;
+    Pin*                _dc_pin;
+    Pin*                _reset_pin;
+    Pin*                _backlight_pin;
 
     uint16_t _fg_color  = WHITE;
     uint16_t _bg_color  = BLACK;

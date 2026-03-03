@@ -1,75 +1,14 @@
-board: None
-name: Default (Test Drive no I/O)
-meta: 
+name: "MKS DLC32 3018 CNC"
+board: "MKS-DLC32 V2.1"
+
 stepping:
-  engine: RMT
+  engine: I2S_STATIC
   idle_ms: 255
   pulse_us: 4
-  dir_delay_us: 0
+  dir_delay_us: 1
   disable_delay_us: 0
-  segments: 12
-
-spi:
-  miso_pin: NO_PIN
-  mosi_pin: NO_PIN
-  sck_pin: NO_PIN
-
-sdcard:
-  cs_pin: NO_PIN
-  card_detect_pin: NO_PIN
-  frequency_hz: 8000000
-
-kinematics:
-  Cartesian:
-
-axes:
-  shared_stepper_disable_pin: NO_PIN
-  shared_stepper_reset_pin: NO_PIN
-  homing_runs: 2
-  x:
-    steps_per_mm: 80.000000
-    max_rate_mm_per_min: 1000.000000
-    acceleration_mm_per_sec2: 25.000000
-    max_travel_mm: 1000.000000
-    soft_limits: false
-    motor0:
-      limit_neg_pin: NO_PIN
-      limit_pos_pin: NO_PIN
-      limit_all_pin: NO_PIN
-      hard_limits: false
-      pulloff_mm: 1.000000
-      null_motor:
-
-  y:
-    steps_per_mm: 80.000000
-    max_rate_mm_per_min: 1000.000000
-    acceleration_mm_per_sec2: 25.000000
-    max_travel_mm: 1000.000000
-    soft_limits: false
-    motor0:
-      limit_neg_pin: NO_PIN
-      limit_pos_pin: NO_PIN
-      limit_all_pin: NO_PIN
-      hard_limits: false
-      pulloff_mm: 1.000000
-      null_motor:
-
-  z:
-    steps_per_mm: 80.000000
-    max_rate_mm_per_min: 1000.000000
-    acceleration_mm_per_sec2: 25.000000
-    max_travel_mm: 1000.000000
-    soft_limits: false
-    motor0:
-      limit_neg_pin: NO_PIN
-      limit_pos_pin: NO_PIN
-      limit_all_pin: NO_PIN
-      hard_limits: false
-      pulloff_mm: 1.000000
-      null_motor:
 
 control:
-  safety_door_pin: NO_PIN
   reset_pin: NO_PIN
   feed_hold_pin: NO_PIN
   cycle_start_pin: NO_PIN
@@ -77,8 +16,18 @@ control:
   macro1_pin: NO_PIN
   macro2_pin: NO_PIN
   macro3_pin: NO_PIN
-  fault_pin: NO_PIN
-  estop_pin: NO_PIN
+
+i2so:
+  bck_pin: gpio.16
+  data_pin: gpio.21
+  ws_pin: gpio.17
+  min_pulse_us: 2
+  oe_pin: NO_PIN
+
+# spi: removed old spi to avoid duplicate definitions
+#   miso_pin: gpio.12
+#   mosi_pin: gpio.13
+#   sck_pin: gpio.14
 
 coolant:
   flood_pin: NO_PIN
@@ -89,31 +38,14 @@ probe:
   pin: NO_PIN
   toolsetter_pin: NO_PIN
   check_mode_start: true
-  hard_stop: false
 
 macros:
   startup_line0:
   startup_line1:
-  Macro0:
-  Macro1:
-  Macro2:
-  Macro3:
-  after_homing:
-  after_reset:
-  after_unlock:
-
-start:
-  must_home: false
-  deactivate_parking: false
-  check_limits: true
-
-parking:
-  enable: false
-  axis: Z
-  target_mpos_mm: -5.000000
-  rate_mm_per_min: 800.000000
-  pullout_distance_mm: 5.000000
-  pullout_rate_mm_per_min: 250.000000
+  macro0:
+  macro1:
+  macro2:
+  macro3:
 
 user_outputs:
   analog0_pin: NO_PIN
@@ -128,29 +60,79 @@ user_outputs:
   digital1_pin: NO_PIN
   digital2_pin: NO_PIN
   digital3_pin: NO_PIN
-  digital4_pin: NO_PIN
-  digital5_pin: NO_PIN
-  digital6_pin: NO_PIN
-  digital7_pin: NO_PIN
 
-user_inputs:
-  analog0_pin: NO_PIN
-  analog1_pin: NO_PIN
-  analog2_pin: NO_PIN
-  analog3_pin: NO_PIN
-  digital0_pin: NO_PIN
-  digital1_pin: NO_PIN
-  digital2_pin: NO_PIN
-  digital3_pin: NO_PIN
-  digital4_pin: NO_PIN
-  digital5_pin: NO_PIN
-  digital6_pin: NO_PIN
-  digital7_pin: NO_PIN
+start:
+  must_home: false
+  check_limits: false
+  deactivate_parking: false
 
-arc_tolerance_mm: 0.002000
-junction_deviation_mm: 0.010000
-verbose_errors: true
-report_inches: false
-enable_parking_override_control: false
-use_line_numbers: false
-planner_blocks: 16
+axes:
+  shared_stepper_disable_pin: I2SO.0
+  x:
+    steps_per_mm: 800.000
+    max_rate_mm_per_min: 2000.000
+    acceleration_mm_per_sec2: 100.000
+    max_travel_mm: 300.000
+    homing:
+      cycle: 2
+      mpos_mm: 0.000
+      positive_direction: false
+    motor0:
+      limit_neg_pin: gpio.36:low
+      hard_limits: true
+      stepstick:
+        step_pin: I2SO.1
+        direction_pin: I2SO.2
+  y:
+    steps_per_mm: 800.000
+    max_rate_mm_per_min: 2000.000
+    acceleration_mm_per_sec2: 100.000
+    max_travel_mm: 180.000
+    homing:
+      cycle: 2
+      mpos_mm: 0.000
+      positive_direction: false
+    motor0:
+      limit_neg_pin: gpio.35:low
+      hard_limits: true
+      stepstick:
+        step_pin: I2SO.5
+        direction_pin: I2SO.6:low
+  z:
+    steps_per_mm: 800.000
+    max_rate_mm_per_min: 800.000
+    acceleration_mm_per_sec2: 50.000
+    max_travel_mm: 40.000
+    homing:
+      cycle: 1
+      mpos_mm: 0.000
+      positive_direction: true
+    motor0:
+      limit_pos_pin: gpio.34:low
+      hard_limits: true
+      stepstick:
+        step_pin: I2SO.3
+        direction_pin: I2SO.4
+
+PWM:
+  pwm_hz: 1000
+  output_pin: gpio.32
+  enable_pin: NO_PIN
+  direction_pin: NO_PIN
+  disable_with_s0: true
+  s0_with_disable: false
+  tool_num: 0
+  speed_map: 0=0.000% 1000=100.000%
+
+spi:
+  miso_pin: gpio.19
+  mosi_pin: gpio.23
+  sck_pin: gpio.18
+
+ts24:
+  cs_pin: gpio.25
+  dc_pin: gpio.33
+  reset_pin: gpio.27
+  backlight_pin: gpio.5:low
+  touch_cs_pin: gpio.26
+  touch_irq_pin: NO_PIN
