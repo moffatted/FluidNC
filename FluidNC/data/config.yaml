@@ -134,5 +134,5 @@ ts24:
   dc_pin: gpio.33
   reset_pin: gpio.27
   backlight_pin: gpio.5:low
-  touch_cs_pin: gpio.22
-  touch_irq_pin: gpio.0
+  touch_cs_pin: gpio.26
+  touch_irq_pin: NO_PIN

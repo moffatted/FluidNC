@@ -4,6 +4,8 @@
 #include "Configuration/Configurable.h"
 #include "Channel.h"
 #include "Module.h"
+#include <freertos/FreeRTOS.h>
+#include <freertos/queue.h>
 
 // Forward declarations for drivers
 class ST7789;
@@ -51,6 +53,10 @@ private:
     std::string _last_state;
     float       _last_mpos[3] = { 0.0f, 0.0f, 0.0f };
     bool        _is_homed     = false;
+
+    // FreeRTOS queue for thread-safe command delivery from ui_task to polling loop
+    QueueHandle_t    _cmdQueue   = nullptr;
+    static const int CMD_MAX_LEN = 64;
 
     std::string _report;
     void        parse_report();

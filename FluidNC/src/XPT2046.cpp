@@ -79,7 +79,8 @@ bool XPT2046::isTouched() {
         return gpio_get_level((gpio_num_t)_irq_pin) == 0;
     }
     // Alternatively check Z pressure
-    return getRawPoint().z > 200;
+    TouchPoint p = getRawPoint();
+    return p.z > 100 && p.z < 4000;
 }
 
 TouchPoint XPT2046::getRawPoint() {
@@ -92,7 +93,7 @@ TouchPoint XPT2046::getRawPoint() {
     // Read Z (Pressure approximation)
     int z1 = transfer16(CMD_Z1_READ);
     int z2 = transfer16(CMD_Z2_READ);
-    p.z    = z1 - z2;
+    p.z    = z1 + 4095 - z2;
 
     return p;
 }
@@ -101,10 +102,25 @@ TouchPoint XPT2046::getPoint(uint16_t displayWidth, uint16_t displayHeight, uint
     TouchPoint raw = getRawPoint();
     TouchPoint cal = { 0, 0, raw.z };
 
-    // Calculate scaling
+    // For MKS TS24, the touch screen orientation needs to be mapped to the display orientation
+    // Our display is rotated 90 degrees to landscape (MADCTL 0x60).
+    // Touch raw coordinates mapping for this physical orientation:
+    // Display Landscape:   Y+ is right, X+ is down (or swapped)
+    // Physical Touch: Usually X and Y are swapped relative to landscape display
+
+    // Apply swap_xy for MKS TS24-R landscape rotation
+    int16_t raw_x = raw.y;
+    int16_t raw_y = raw.x;
+
+    // Invert X and Y for TS24-R calibration
+    // Based on user calibration feedback, raw values map opposite to screen pixels
+
     if (xMax != xMin && yMax != yMin) {
-        cal.x = (raw.x - xMin) * displayWidth / (xMax - xMin);
-        cal.y = (raw.y - yMin) * displayHeight / (yMax - yMin);
+        cal.x = (raw_x - xMin) * displayWidth / (xMax - xMin);
+        cal.y = (raw_y - yMin) * displayHeight / (yMax - yMin);
+
+        // Invert X only: raw_x increases right-to-left, display X increases left-to-right
+        cal.x = displayWidth - 1 - cal.x;
     }
 
     // Clamp values

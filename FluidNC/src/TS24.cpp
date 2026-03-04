@@ -9,6 +9,7 @@
 #include <Arduino.h>
 #include "Serial.h"
 #include "string_util.h"
+#include "RealtimeCmd.h"
 
 static void ui_task(void* param);
 
@@ -43,6 +44,9 @@ void TS24::init() {
     // Clear Screen and Draw Initial Layout
     _display->fillScreen(ST7789::BLACK);
     render_ui();
+
+    // Create FreeRTOS queue for thread-safe command delivery from ui_task to polling loop
+    _cmdQueue = xQueueCreate(4, CMD_MAX_LEN);
 
     allChannels.registration(this);
     setReportInterval(200);
@@ -87,6 +91,24 @@ size_t TS24::write(uint8_t data) {
 }
 
 Error TS24::pollLine(char* line) {
+    // Check FreeRTOS command queue first (thread-safe cross-core delivery)
+    if (line && _cmdQueue) {
+        char cmd[CMD_MAX_LEN];
+        if (xQueueReceive(_cmdQueue, cmd, 0) == pdTRUE) {
+            // Check for realtime commands (single byte, >= 0x80 or specific chars)
+            if (cmd[1] == '\0' && is_realtime_command((uint8_t)cmd[0])) {
+                handleRealtimeCharacter((uint8_t)cmd[0]);
+                return Error::NoData;
+            }
+            strncpy(line, cmd, Channel::maxLine);
+            // Strip trailing \n and \r (lineComplete normally does this)
+            size_t len = strlen(line);
+            while (len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r')) {
+                line[--len] = '\0';
+            }
+            return Error::Ok;
+        }
+    }
     return Channel::pollLine(line);
 }
 
@@ -123,7 +145,6 @@ void TS24::parse_status_report() {
     size_t homed_start = _report.find("H:", next);
     if (homed_start != std::string::npos) {
         homed_start += 2;
-        // If the homed mask is not '0', some axes are homed
         _is_homed = (_report[homed_start] != '0' && _report[homed_start] != '|' && _report[homed_start] != '>');
     }
 }
@@ -171,17 +192,16 @@ void TS24::render_ui() {
     }
 
     // Layout for 320x240 (MKS TS24-R)
-    // MADCTL 0x68: Y=0 at physical BOTTOM, Y=239 at physical TOP
     const uint16_t W = 320;
     const uint16_t H = 240;
 
-    // --- Header: State (physical bottom = high Y) ---
+    // --- Header: State ---
     _display->fillRect(0, 210, W, 30, ST7789::BLUE);
     _display->setTextColor(ST7789::WHITE, ST7789::BLUE);
     std::string state_str = _last_state.empty() ? "Idle" : _last_state;
     _display->drawString(8, 217, state_str.c_str(), 2);
 
-    // --- Coord bar (below header = slightly lower Y) ---
+    // --- Coord bar ---
     _display->fillRect(0, 182, W, 28, ST7789::BLACK);
     _display->setTextColor(ST7789::GREEN, ST7789::BLACK);
     char pos_buf[64];
@@ -191,15 +211,14 @@ void TS24::render_ui() {
     // --- Jog buttons ---
     const uint16_t BTN_W = 60;
     const uint16_t BTN_H = 35;
-    const uint16_t COL1  = 5;    // X- column
-    const uint16_t COL2  = 70;   // Center column (Y+/Y-)
-    const uint16_t COL3  = 135;  // X+ column
-    const uint16_t ZCOL  = 220;  // Z column
+    const uint16_t COL1  = 5;
+    const uint16_t COL2  = 70;
+    const uint16_t COL3  = 135;
+    const uint16_t ZCOL  = 220;
 
-    // Low Y = physical top of jog area
-    const uint16_t ROW_YP = 61;   // Y+ row (physical top)
-    const uint16_t ROW_X  = 101;  // X-/X+ row (physical middle)
-    const uint16_t ROW_YM = 141;  // Y- row (physical bottom)
+    const uint16_t ROW_YP = 61;
+    const uint16_t ROW_X  = 101;
+    const uint16_t ROW_YM = 141;
 
     // Y+
     _display->fillRect(COL2, ROW_YP, BTN_W, BTN_H, ST7789::GRAY);
@@ -218,29 +237,27 @@ void TS24::render_ui() {
     _display->fillRect(COL2, ROW_YM, BTN_W, BTN_H, ST7789::GRAY);
     _display->drawString(COL2 + 18, ROW_YM + 10, "Y-", 2);
 
-    // --- Z controls (right side) ---
-    _display->fillRect(ZCOL, ROW_YP, BTN_W, BTN_H, 0x0578);  // Teal
+    // Z controls
+    _display->fillRect(ZCOL, ROW_YP, BTN_W, BTN_H, 0x0578);
     _display->setTextColor(ST7789::WHITE, 0x0578);
     _display->drawString(ZCOL + 18, ROW_YP + 10, "Z+", 2);
 
     _display->fillRect(ZCOL, ROW_YM, BTN_W, BTN_H, 0x0578);
     _display->drawString(ZCOL + 18, ROW_YM + 10, "Z-", 2);
 
-    // Zero XY (physically top = smaller Y)
+    // Zero XY
     _display->fillRect(ZCOL, ROW_X, BTN_W, BTN_H / 2 - 2, ST7789::CYAN);
     _display->setTextColor(ST7789::BLACK, ST7789::CYAN);
     _display->drawString(ZCOL + 12, ROW_X + 3, "0 XY", 1);
 
-    // Zero Z (physically bottom = larger Y)
+    // Zero Z
     _display->fillRect(ZCOL, ROW_X + BTN_H / 2, BTN_W, BTN_H / 2 - 2, ST7789::YELLOW);
     _display->setTextColor(ST7789::BLACK, ST7789::YELLOW);
     _display->drawString(ZCOL + 15, ROW_X + BTN_H / 2 + 3, "0 Z", 1);
 
-    // --- Top bar (physical TOP) ---
-    // Split 320px into three sections: ~104px each
+    // --- Top bar ---
     const uint16_t TOP_BTN_W = 104;
 
-    // Home button color logic
     uint16_t home_color = ST7789::BLUE;
     uint16_t home_text  = ST7789::WHITE;
     if (_last_state.find("Home") != std::string::npos) {
@@ -251,17 +268,14 @@ void TS24::render_ui() {
         home_text  = ST7789::BLACK;
     }
 
-    // Home
     _display->fillRect(0, 0, TOP_BTN_W, 40, home_color);
     _display->setTextColor(home_text, home_color);
     _display->drawString(29, 13, "HOME", 2);
 
-    // Stop
     _display->fillRect(TOP_BTN_W + 4, 0, TOP_BTN_W, 40, ST7789::RED);
     _display->setTextColor(ST7789::WHITE, ST7789::RED);
     _display->drawString(TOP_BTN_W + 4 + 29, 13, "STOP", 2);
 
-    // Alarm / Unlock - Always visible
     bool     is_alarm     = (_last_state.find("Alarm") != std::string::npos);
     uint16_t unlock_color = is_alarm ? ST7789::RED : ST7789::GRAY;
     uint16_t unlock_text  = is_alarm ? ST7789::WHITE : ST7789::BLACK;
@@ -272,62 +286,158 @@ void TS24::render_ui() {
 }
 
 void TS24::handle_touch() {
-    if (!_touch || !_touch->isTouched())
+    if (!_touch)
+        return;
+
+    // Read raw point for diagnostics
+    TouchPoint raw     = _touch->getRawPoint();
+    bool       touched = (raw.z > 100 && raw.z < 4000);
+
+    // Periodic idle-state log (every 2s)
+    static uint32_t last_log = 0;
+    if (millis() - last_log > 2000) {
+        last_log = millis();
+        log_info("TS24 POLL: rawX=" << raw.x << " rawY=" << raw.y << " Z=" << raw.z << " touched=" << touched);
+    }
+
+    if (!touched)
         return;
 
     // Get point mapped to 320x240 display coordinates
-    TouchPoint p = _touch->getPoint(320, 240, 200, 200, 3800, 3800);
+    TouchPoint p = _touch->getPoint(320, 240, 550, 600, 3650, 3450);
 
-    // Using printf since log_info sometimes has macro issues with multiple args in some environments
-    log_info("TS24 Touch: X=" << p.x << ", Y=" << p.y);
+    log_info("TS24 TOUCH: raw(" << raw.x << "," << raw.y << "," << raw.z << ") -> screen(" << p.x << "," << p.y << ")");
 
-    // A simple debouncer
-    static uint32_t last_touch = 0;
-    if (millis() - last_touch < 300)
+    // --- Jog acceleration state ---
+    static uint32_t jog_hold_start  = 0;
+    static uint32_t last_jog_time   = 0;
+    static int      last_jog_region = -1;
+
+    // Determine touch region for jog acceleration tracking
+    int cur_region = -1;
+    if (p.y < 45)
+        cur_region = 0;  // Top bar
+    else if (p.y >= 200)
+        cur_region = 1;  // State header
+    else if (p.x < 200) {
+        if (p.y < 98)
+            cur_region = 10;  // Y+
+        else if (p.y < 140)
+            cur_region = (p.x < 70) ? 11 : (p.x >= 125 ? 12 : -1);
+        else
+            cur_region = 13;  // Y-
+    } else if (p.x >= 210) {
+        if (p.y < 98)
+            cur_region = 20;  // Z+
+        else if (p.y >= 140)
+            cur_region = 21;  // Z-
+        else if (p.y < 119)
+            cur_region = 22;  // Zero XY
+        else
+            cur_region = 23;  // Zero Z
+    }
+
+    uint32_t now    = millis();
+    bool     is_jog = (cur_region >= 10 && cur_region <= 21);
+
+    // Reset hold timer if button changed or touch gap > 400ms
+    if (cur_region != last_jog_region || (now - last_jog_time) > 400) {
+        jog_hold_start = now;
+    }
+    last_jog_region = cur_region;
+
+    // Debounce: 150ms for jog, 300ms for others
+    uint32_t        debounce_ms = is_jog ? 150 : 300;
+    static uint32_t last_touch  = 0;
+    if (now - last_touch < debounce_ms)
         return;
-    last_touch = millis();
+    last_touch    = now;
+    last_jog_time = now;
 
-    // --- Top Bar (drawn at y < 40, physically at top) ---
-    if (p.y < 40) {
+    // Jog distance ramps up with sustained hold
+    uint32_t hold_ms = now - jog_hold_start;
+    int      jog_dist, jog_feed, ramp_level;
+    if (hold_ms > 1500) {
+        jog_dist   = 50;
+        jog_feed   = 5000;
+        ramp_level = 3;
+    } else if (hold_ms > 500) {
+        jog_dist   = 10;
+        jog_feed   = 3000;
+        ramp_level = 2;
+    } else {
+        jog_dist   = 1;
+        jog_feed   = 1000;
+        ramp_level = 1;
+    }
+    int z_dist = (jog_dist > 10) ? 10 : jog_dist;
+    int z_feed = (jog_feed > 2000) ? 2000 : jog_feed;
+
+    // Cancel any in-progress jog before sending a new one so the new speed takes effect immediately
+    if (is_jog && ramp_level > 1) {
+        execute_realtime_command(Cmd::JogCancel, *this);
+    }
+
+    // Helper: send command via FreeRTOS queue
+    auto safePush = [this, ramp_level](const char* cmd, const char* label) {
+        log_info("TS24 ACTION: " << label << " [ramp=" << ramp_level << "] -> " << cmd);
+        if (_cmdQueue) {
+            char buf[CMD_MAX_LEN] = {};
+            strncpy(buf, cmd, CMD_MAX_LEN - 1);
+            xQueueSend(_cmdQueue, buf, 0);
+        }
+    };
+
+    // --- Top Bar ---
+    if (p.y < 45) {
         const uint16_t TOP_BTN_W = 104;
-        if (p.x < TOP_BTN_W) {  // HOME
-            this->push(std::string("$H\n"));
-        } else if (p.x >= TOP_BTN_W + 4 && p.x < (TOP_BTN_W + 4) * 2) {  // STOP
-            this->push(std::string("\x85"));                             // Jog Cancel / Feedhold
-        } else if (p.x >= (TOP_BTN_W + 4) * 2) {                         // ALARM/UNLOCK
+        if (p.x < TOP_BTN_W) {
+            safePush("$H\n", "HOME");
+        } else if (p.x >= TOP_BTN_W + 4 && p.x < (TOP_BTN_W + 4) * 2) {
+            // STOP: call execute_realtime_command directly for immediate effect in all states
+            log_info("TS24 ACTION: STOP (Reset)");
+            execute_realtime_command(Cmd::Reset, *this);
+        } else if (p.x >= (TOP_BTN_W + 4) * 2) {
             if (_last_state.find("Alarm") != std::string::npos) {
-                this->push(std::string("$X\n"));
+                safePush("$X\n", "UNLOCK");
             }
         }
     }
-    // --- State Header (drawn at y > 210, physically at bottom) ---
-    else if (p.y >= 210) {
+    // --- State Header ---
+    else if (p.y >= 200) {
         if (_last_state.find("Alarm") != std::string::npos) {
-            this->push(std::string("$X\n"));  // Unlock alarm
+            safePush("$X\n", "UNLOCK_BAR");
         }
     }
-    // --- XY Jog area: x < 200, y 60..180 ---
-    else if (p.x < 200 && p.y >= 60 && p.y < 180) {
-        if (p.y >= 60 && p.y < 95 && p.x >= 70 && p.x < 130) {  // Y+ (physically higher up)
-            this->push(std::string("$J=G91 Y1 F1000\n"));
-        } else if (p.y >= 95 && p.y < 130 && p.x >= 5 && p.x < 65) {  // X-
-            this->push(std::string("$J=G91 X-1 F1000\n"));
-        } else if (p.y >= 95 && p.y < 130 && p.x >= 135 && p.x < 195) {  // X+
-            this->push(std::string("$J=G91 X1 F1000\n"));
-        } else if (p.y >= 130 && p.y < 165 && p.x >= 70 && p.x < 130) {  // Y-
-            this->push(std::string("$J=G91 Y-1 F1000\n"));
-        }
-    }
-    // --- Z Jog area: x >= 220 ---
-    else if (p.x >= 220 && p.x < 280) {
-        if (p.y >= 60 && p.y < 95) {  // Z+
-            this->push(std::string("$J=G91 Z1 F500\n"));
-        } else if (p.y >= 130 && p.y < 165) {  // Z-
-            this->push(std::string("$J=G91 Z-1 F500\n"));
-        } else if (p.y >= 95 && p.y < 112) {  // Zero XY
-            this->push(std::string("G10 L20 P1 X0 Y0\n"));
-        } else if (p.y >= 112 && p.y < 130) {  // Zero Z
-            this->push(std::string("G10 L20 P1 Z0\n"));
+    // --- Jog area ---
+    else if (p.y >= 45 && p.y < 200) {
+        char cmd[CMD_MAX_LEN];
+        if (p.x < 200) {
+            if (p.y < 98 && p.x >= 60 && p.x < 140) {
+                snprintf(cmd, sizeof(cmd), "$J=G91 Y%d F%d\n", jog_dist, jog_feed);
+                safePush(cmd, "Y+");
+            } else if (p.y >= 98 && p.y < 140 && p.x >= 0 && p.x < 70) {
+                snprintf(cmd, sizeof(cmd), "$J=G91 X-%d F%d\n", jog_dist, jog_feed);
+                safePush(cmd, "X-");
+            } else if (p.y >= 98 && p.y < 140 && p.x >= 125 && p.x < 200) {
+                snprintf(cmd, sizeof(cmd), "$J=G91 X%d F%d\n", jog_dist, jog_feed);
+                safePush(cmd, "X+");
+            } else if (p.y >= 140 && p.x >= 60 && p.x < 140) {
+                snprintf(cmd, sizeof(cmd), "$J=G91 Y-%d F%d\n", jog_dist, jog_feed);
+                safePush(cmd, "Y-");
+            }
+        } else if (p.x >= 210) {
+            if (p.y < 98) {
+                snprintf(cmd, sizeof(cmd), "$J=G91 Z%d F%d\n", z_dist, z_feed);
+                safePush(cmd, "Z+");
+            } else if (p.y >= 140) {
+                snprintf(cmd, sizeof(cmd), "$J=G91 Z-%d F%d\n", z_dist, z_feed);
+                safePush(cmd, "Z-");
+            } else if (p.y < 119) {
+                safePush("G10 L20 P1 X0 Y0\n", "ZERO_XY");
+            } else {
+                safePush("G10 L20 P1 Z0\n", "ZERO_Z");
+            }
         }
     }
 }
