@@ -120,11 +120,8 @@ void TS24::parse_status_report() {
     size_t homed_start = _report.find("H:", next);
     if (homed_start != std::string::npos) {
         homed_start += 2;
-        if (_report[homed_start] != '0') {
-            _is_homed = true;
-        } else {
-            _is_homed = false;
-        }
+        // If the homed mask is not '0', some axes are homed
+        _is_homed = (_report[homed_start] != '0' && _report[homed_start] != '|' && _report[homed_start] != '>');
     }
 }
 
@@ -236,14 +233,14 @@ void TS24::render_ui() {
     _display->setTextColor(ST7789::BLACK, ST7789::YELLOW);
     _display->drawString(ZCOL + 15, ROW_X + BTN_H / 2 + 3, "0 Z", 1);
 
-    // --- Top bar (physical bottom) ---
+    // --- Top bar (physical TOP) ---
     // Split 320px into three sections: ~104px each
     const uint16_t TOP_BTN_W = 104;
 
     // Home button color logic
     uint16_t home_color = ST7789::BLUE;
     uint16_t home_text  = ST7789::WHITE;
-    if (_last_state == "Home") {
+    if (_last_state.find("Home") != std::string::npos) {
         home_color = ST7789::YELLOW;
         home_text  = ST7789::BLACK;
     } else if (_is_homed) {
@@ -278,53 +275,56 @@ void TS24::handle_touch() {
     // Get point mapped to 320x240 display coordinates
     TouchPoint p = _touch->getPoint(320, 240, 200, 200, 3800, 3800);
 
+    // Using printf since log_info sometimes has macro issues with multiple args in some environments
+    log_info("TS24 Touch: X=" << p.x << ", Y=" << p.y);
+
     // A simple debouncer
     static uint32_t last_touch = 0;
     if (millis() - last_touch < 300)
         return;
     last_touch = millis();
 
-    // Top bar (physical bottom): y < 40
+    // --- Top Bar (drawn at y < 40, physically at top) ---
     if (p.y < 40) {
         const uint16_t TOP_BTN_W = 104;
-        if (p.x < TOP_BTN_W) {  // HOME ALL
-            push(std::string("$H\n"));
+        if (p.x < TOP_BTN_W) {  // HOME
+            this->push(std::string("$H\n"));
         } else if (p.x >= TOP_BTN_W + 4 && p.x < (TOP_BTN_W + 4) * 2) {  // STOP
-            push(std::string("\x85"));                                   // Jog Cancel / Feedhold
-        } else if (p.x >= (TOP_BTN_W + 4) * 2) {                         // UNLOCK
+            this->push(std::string("\x85"));                             // Jog Cancel / Feedhold
+        } else if (p.x >= (TOP_BTN_W + 4) * 2) {                         // ALARM/UNLOCK
             if (_last_state.find("Alarm") != std::string::npos) {
-                push(std::string("$X\n"));
+                this->push(std::string("$X\n"));
             }
         }
     }
-    // Bottom bar (physical top): y >= 200
-    // (This area used to be the bottom bar, but we moved the controls to the physical bottom)
-    // We'll leave this empty for now or use it for other features if needed.
-    else if (p.y >= 200) {
-        // No-op for now to avoid accidental triggers
-    }
-    // XY Jog area: x < 200, y 64..179
-    else if (p.x < 200 && p.y >= 64 && p.y < 180) {
-        if (p.y >= 64 && p.y < 99 && p.x >= 70 && p.x < 130) {  // Y+
-            push(std::string("$J=G91 Y1 F1000\n"));
-        } else if (p.y >= 104 && p.y < 139 && p.x >= 5 && p.x < 65) {  // X-
-            push(std::string("$J=G91 X-1 F1000\n"));
-        } else if (p.y >= 104 && p.y < 139 && p.x >= 135 && p.x < 195) {  // X+
-            push(std::string("$J=G91 X1 F1000\n"));
-        } else if (p.y >= 144 && p.y < 179 && p.x >= 70 && p.x < 130) {  // Y-
-            push(std::string("$J=G91 Y-1 F1000\n"));
+    // --- State Header (drawn at y > 210, physically at bottom) ---
+    else if (p.y >= 210) {
+        if (_last_state.find("Alarm") != std::string::npos) {
+            this->push(std::string("$X\n"));  // Unlock alarm
         }
     }
-    // Z Jog area: x >= 220
+    // --- XY Jog area: x < 200, y 60..180 ---
+    else if (p.x < 200 && p.y >= 60 && p.y < 180) {
+        if (p.y >= 60 && p.y < 95 && p.x >= 70 && p.x < 130) {  // Y+ (physically higher up)
+            this->push(std::string("$J=G91 Y1 F1000\n"));
+        } else if (p.y >= 95 && p.y < 130 && p.x >= 5 && p.x < 65) {  // X-
+            this->push(std::string("$J=G91 X-1 F1000\n"));
+        } else if (p.y >= 95 && p.y < 130 && p.x >= 135 && p.x < 195) {  // X+
+            this->push(std::string("$J=G91 X1 F1000\n"));
+        } else if (p.y >= 130 && p.y < 165 && p.x >= 70 && p.x < 130) {  // Y-
+            this->push(std::string("$J=G91 Y-1 F1000\n"));
+        }
+    }
+    // --- Z Jog area: x >= 220 ---
     else if (p.x >= 220 && p.x < 280) {
-        if (p.y >= 64 && p.y < 99) {  // Z+
-            push(std::string("$J=G91 Z1 F500\n"));
-        } else if (p.y >= 144 && p.y < 179) {  // Z-
-            push(std::string("$J=G91 Z-1 F500\n"));
-        } else if (p.y >= 104 && p.y < 122) {  // Zero XY
-            push(std::string("G10 L20 P1 X0 Y0\n"));
-        } else if (p.y >= 122 && p.y < 139) {  // Zero Z
-            push(std::string("G10 L20 P1 Z0\n"));
+        if (p.y >= 60 && p.y < 95) {  // Z+
+            this->push(std::string("$J=G91 Z1 F500\n"));
+        } else if (p.y >= 130 && p.y < 165) {  // Z-
+            this->push(std::string("$J=G91 Z-1 F500\n"));
+        } else if (p.y >= 95 && p.y < 112) {  // Zero XY
+            this->push(std::string("G10 L20 P1 X0 Y0\n"));
+        } else if (p.y >= 112 && p.y < 130) {  // Zero Z
+            this->push(std::string("G10 L20 P1 Z0\n"));
         }
     }
 }
