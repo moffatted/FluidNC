@@ -226,14 +226,28 @@ void TS24::render_ui() {
     _display->setTextColor(ST7789::BLACK, ST7789::YELLOW);
     _display->drawString(ZCOL + 15, ROW_X + BTN_H / 2 + 3, "0 Z", 1);
 
-    // --- Bottom bar (physical bottom = low Y) ---
-    _display->fillRect(0, 0, W / 2 - 3, 40, ST7789::GREEN);
-    _display->setTextColor(ST7789::BLACK, ST7789::GREEN);
-    _display->drawString(20, 12, "HOME ALL", 2);
+    // --- Top bar (physical bottom) ---
+    // Split 320px into three sections: ~104px each
+    const uint16_t TOP_BTN_W = 104;
 
-    _display->fillRect(W / 2 + 3, 0, W / 2 - 3, 40, ST7789::RED);
+    // Home
+    _display->fillRect(0, 0, TOP_BTN_W, 40, ST7789::GREEN);
+    _display->setTextColor(ST7789::BLACK, ST7789::GREEN);
+    _display->drawString(29, 13, "HOME", 2);
+
+    // Stop
+    _display->fillRect(TOP_BTN_W + 4, 0, TOP_BTN_W, 40, ST7789::RED);
     _display->setTextColor(ST7789::WHITE, ST7789::RED);
-    _display->drawString(W / 2 + 40, 12, "STOP", 2);
+    _display->drawString(TOP_BTN_W + 4 + 29, 13, "STOP", 2);
+
+    // Alarm / Unlock - Always visible
+    bool     is_alarm     = (_last_state.find("Alarm") != std::string::npos);
+    uint16_t unlock_color = is_alarm ? ST7789::RED : ST7789::GRAY;
+    uint16_t unlock_text  = is_alarm ? ST7789::WHITE : ST7789::BLACK;
+
+    _display->fillRect((TOP_BTN_W + 4) * 2, 0, TOP_BTN_W, 40, unlock_color);
+    _display->setTextColor(unlock_text, unlock_color);
+    _display->drawString(((TOP_BTN_W + 4) * 2) + 23, 13, "ALARM", 2);
 }
 
 void TS24::handle_touch() {
@@ -249,13 +263,24 @@ void TS24::handle_touch() {
         return;
     last_touch = millis();
 
-    // Bottom bar: y >= 200
-    if (p.y >= 200) {
-        if (p.x < 157) {  // HOME ALL
+    // Top bar (physical bottom): y < 40
+    if (p.y < 40) {
+        const uint16_t TOP_BTN_W = 104;
+        if (p.x < TOP_BTN_W) {  // HOME ALL
             push(std::string("$H\n"));
-        } else if (p.x >= 163) {        // STOP
-            push(std::string("\x85"));  // Jog Cancel / Feedhold
+        } else if (p.x >= TOP_BTN_W + 4 && p.x < (TOP_BTN_W + 4) * 2) {  // STOP
+            push(std::string("\x85"));                                   // Jog Cancel / Feedhold
+        } else if (p.x >= (TOP_BTN_W + 4) * 2) {                         // UNLOCK
+            if (_last_state.find("Alarm") != std::string::npos) {
+                push(std::string("$X\n"));
+            }
         }
+    }
+    // Bottom bar (physical top): y >= 200
+    // (This area used to be the bottom bar, but we moved the controls to the physical bottom)
+    // We'll leave this empty for now or use it for other features if needed.
+    else if (p.y >= 200) {
+        // No-op for now to avoid accidental triggers
     }
     // XY Jog area: x < 200, y 64..179
     else if (p.x < 200 && p.y >= 64 && p.y < 180) {

@@ -81,7 +81,7 @@ bool ST7789::init(Pin* cs_pin, Pin* dc_pin, Pin* reset_pin, Pin* backlight_pin) 
     sendData(0x96);
 
     sendCommand(0x36);  // Memory Data Access Control
-    sendData(0x68);     // Landscape MX|MV|BGR — only value that renders text correctly on TS24-R
+    sendData(0x60);     // Landscape MX|MV|RGB — Swapped from 0x68 (BGR) so RED appears as RED
 
     sendCommand(0x3A);  // Interface Pixel Format
     sendData(0x55);     // 16-bit color
