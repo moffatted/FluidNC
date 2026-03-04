@@ -164,7 +164,7 @@ bool ST7789::init(Pin* cs_pin, Pin* dc_pin, Pin* reset_pin, Pin* backlight_pin) 
     if (_backlight_pin && _backlight_pin->defined())
         _backlight_pin->on();
 
-    fillScreen(BLACK);  // Clear screen before UI layout is drawn
+    clearHardwareRAM();  // Clear full 480-row ST7796 RAM to eliminate power-on artifacts
     return true;
 }
 
@@ -326,4 +326,47 @@ void ST7789::drawString(uint16_t x, uint16_t y, const char* str, uint8_t size) {
         cur_x += 6 * size;
         str++;
     }
+}
+
+void ST7789::clearHardwareRAM() {
+    // ST7796 controller has 320x480 pixels of RAM in landscape mode (with MV set).
+    // Our panel is only 320x240, but the extra rows contain power-on garbage.
+    // This method clears ALL rows by directly addressing the full RAM.
+    static const uint16_t HW_COLS = 320;
+    static const uint16_t HW_ROWS = 480;
+
+    spi_device_acquire_bus(_spi, portMAX_DELAY);
+    if (_cs_pin && _cs_pin->defined())
+        _cs_pin->off();
+
+    // Set address window to full hardware RAM (bypass COL/ROW_OFFSET)
+    sendCommand(0x2A);  // CASET
+    sendData(0x00);
+    sendData(0x00);
+    sendData((uint8_t)((HW_COLS - 1) >> 8));
+    sendData((uint8_t)((HW_COLS - 1) & 0xFF));
+
+    sendCommand(0x2B);  // RASET
+    sendData(0x00);
+    sendData(0x00);
+    sendData((uint8_t)((HW_ROWS - 1) >> 8));
+    sendData((uint8_t)((HW_ROWS - 1) & 0xFF));
+
+    sendCommand(0x2C);  // RAMWR
+
+    if (_dc_pin && _dc_pin->defined())
+        _dc_pin->on();
+
+    // Fill with black, one row at a time
+    static uint16_t zero_buf[320] = {};  // zero-initialized = black
+    for (int row = 0; row < HW_ROWS; row++) {
+        spi_transaction_t t = {};
+        t.length            = HW_COLS * 16;
+        t.tx_buffer         = zero_buf;
+        spi_device_polling_transmit(_spi, &t);
+    }
+
+    if (_cs_pin && _cs_pin->defined())
+        _cs_pin->on();
+    spi_device_release_bus(_spi);
 }

@@ -58,4 +58,5 @@ private:
     void sendCommand(uint8_t cmd);
     void sendData(uint8_t data);
     void sendData(const uint8_t* data, int len);
+    void clearHardwareRAM();  // Clears full ST7796 480-row RAM to remove power-on garbage
 };
