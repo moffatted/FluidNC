@@ -136,8 +136,3 @@ ts24:
   backlight_pin: gpio.5:low
   touch_cs_pin: gpio.22
   touch_irq_pin: gpio.0
-
-wifi:
-  sta:
-    ssid: hansolo
-    password: "@ThePalace531"

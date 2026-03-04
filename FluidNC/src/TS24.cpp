@@ -13,6 +13,7 @@
 static void ui_task(void* param);
 
 void TS24::init() {
+    log_info("TS24: build " __DATE__ " " __TIME__);
     _display = new ST7789();
     _touch   = new XPT2046();
 
@@ -28,7 +29,9 @@ void TS24::init() {
     }
 
     pinnum_t tcs = _touch_cs_pin.defined() ? _touch_cs_pin.getNative(Pin::Capabilities::Output) : 255;
-    pinnum_t irq = _touch_irq_pin.defined() ? _touch_irq_pin.getNative(Pin::Capabilities::Output) : 255;
+    pinnum_t irq = _touch_irq_pin.defined() ? _touch_irq_pin.getNative(Pin::Capabilities::Input) : 255;
+
+    log_info("TS24 Initializing Touch: CS=" << (int)tcs << " IRQ=" << (int)irq);
 
     if (!_touch->init(tcs, irq)) {
         log_error("Failed to init XPT2046 touch controller");
