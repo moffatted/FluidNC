@@ -165,7 +165,7 @@ void TS24::render_ui() {
     const uint16_t W = 320;
     const uint16_t H = 240;
 
-    // --- Header: State (physical top = high Y) ---
+    // --- Header: State (physical bottom = high Y) ---
     _display->fillRect(0, 210, W, 30, ST7789::BLUE);
     _display->setTextColor(ST7789::WHITE, ST7789::BLUE);
     std::string state_str = _last_state.empty() ? "Idle" : _last_state;
