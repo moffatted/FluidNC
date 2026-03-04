@@ -3,7 +3,7 @@ CompileFlags:
   Add:
     - "-xc++"
     # This allows clangd to query your actual ESP32 compiler for system headers
-    - "--query-driver=**/*g++*"
+    - "--query-driver=C:/Users/moffa/.platformio/packages/toolchain-xtensa-esp32/bin/xtensa-esp32-elf-g++*"
   Remove:
     # These flags are for GCC/Xtensa and cause Clang to error out
     - "-fno-tree-switch-conversion"
@@ -11,6 +11,7 @@ CompileFlags:
     - "-fstrict-volatile-bitfields"
     - "-mlongcalls"
     - "-fno-section-anchors"
+    - "-fno-jump-tables"
 
 Index:
   Background: Build # Allows clangd to index in the background for better "Go to Definition"

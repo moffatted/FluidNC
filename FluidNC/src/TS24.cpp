@@ -186,10 +186,10 @@ void TS24::render_ui() {
     const uint16_t COL3  = 135;  // X+ column
     const uint16_t ZCOL  = 220;  // Z column
 
-    // High Y = physical top of jog area
-    const uint16_t ROW_YP = 141;  // Y+ row (physical top)
+    // Low Y = physical top of jog area
+    const uint16_t ROW_YP = 61;   // Y+ row (physical top)
     const uint16_t ROW_X  = 101;  // X-/X+ row (physical middle)
-    const uint16_t ROW_YM = 61;   // Y- row (physical bottom)
+    const uint16_t ROW_YM = 141;  // Y- row (physical bottom)
 
     // Y+
     _display->fillRect(COL2, ROW_YP, BTN_W, BTN_H, ST7789::GRAY);
@@ -216,15 +216,15 @@ void TS24::render_ui() {
     _display->fillRect(ZCOL, ROW_YM, BTN_W, BTN_H, 0x0578);
     _display->drawString(ZCOL + 18, ROW_YM + 10, "Z-", 2);
 
-    // Zero XY (physically above Zero Z = higher Y)
-    _display->fillRect(ZCOL, ROW_X + BTN_H / 2, BTN_W, BTN_H / 2 - 2, ST7789::CYAN);
+    // Zero XY (physically top = smaller Y)
+    _display->fillRect(ZCOL, ROW_X, BTN_W, BTN_H / 2 - 2, ST7789::CYAN);
     _display->setTextColor(ST7789::BLACK, ST7789::CYAN);
-    _display->drawString(ZCOL + 12, ROW_X + BTN_H / 2 + 3, "0 XY", 1);
+    _display->drawString(ZCOL + 12, ROW_X + 3, "0 XY", 1);
 
-    // Zero Z (physically below Zero XY = lower Y)
-    _display->fillRect(ZCOL, ROW_X, BTN_W, BTN_H / 2 - 2, ST7789::YELLOW);
+    // Zero Z (physically bottom = larger Y)
+    _display->fillRect(ZCOL, ROW_X + BTN_H / 2, BTN_W, BTN_H / 2 - 2, ST7789::YELLOW);
     _display->setTextColor(ST7789::BLACK, ST7789::YELLOW);
-    _display->drawString(ZCOL + 15, ROW_X + 3, "0 Z", 1);
+    _display->drawString(ZCOL + 15, ROW_X + BTN_H / 2 + 3, "0 Z", 1);
 
     // --- Bottom bar (physical bottom = low Y) ---
     _display->fillRect(0, 0, W / 2 - 3, 40, ST7789::GREEN);

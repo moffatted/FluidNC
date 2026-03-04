@@ -329,39 +329,39 @@ void ST7789::drawString(uint16_t x, uint16_t y, const char* str, uint8_t size) {
 }
 
 void ST7789::clearHardwareRAM() {
-    // ST7796 controller has 320x480 pixels of RAM in landscape mode (with MV set).
-    // Our panel is only 320x240, but the extra rows contain power-on garbage.
-    // This method clears ALL rows by directly addressing the full RAM.
-    static const uint16_t HW_COLS = 320;
-    static const uint16_t HW_ROWS = 480;
+    // With MADCTL MV set, axes swap on ST7796:
+    //   CASET (X) addresses 0-479 (native rows become landscape columns)
+    //   RASET (Y) addresses 0-319 (native columns become landscape rows)
+    // Our panel only shows 320x240, so garbage can exist in RASET 240-319.
+    static const uint16_t HW_X_MAX = 479;  // CASET max
+    static const uint16_t HW_Y_MAX = 319;  // RASET max
 
     spi_device_acquire_bus(_spi, portMAX_DELAY);
     if (_cs_pin && _cs_pin->defined())
         _cs_pin->off();
 
-    // Set address window to full hardware RAM (bypass COL/ROW_OFFSET)
     sendCommand(0x2A);  // CASET
     sendData(0x00);
     sendData(0x00);
-    sendData((uint8_t)((HW_COLS - 1) >> 8));
-    sendData((uint8_t)((HW_COLS - 1) & 0xFF));
+    sendData((uint8_t)(HW_X_MAX >> 8));
+    sendData((uint8_t)(HW_X_MAX & 0xFF));
 
     sendCommand(0x2B);  // RASET
     sendData(0x00);
     sendData(0x00);
-    sendData((uint8_t)((HW_ROWS - 1) >> 8));
-    sendData((uint8_t)((HW_ROWS - 1) & 0xFF));
+    sendData((uint8_t)(HW_Y_MAX >> 8));
+    sendData((uint8_t)(HW_Y_MAX & 0xFF));
 
     sendCommand(0x2C);  // RAMWR
 
     if (_dc_pin && _dc_pin->defined())
         _dc_pin->on();
 
-    // Fill with black, one row at a time
-    static uint16_t zero_buf[320] = {};  // zero-initialized = black
-    for (int row = 0; row < HW_ROWS; row++) {
+    // Fill entire RAM with black: 480 pixels per row, 320 rows
+    static uint16_t zero_buf[480] = {};  // zero-initialized = black
+    for (int row = 0; row <= HW_Y_MAX; row++) {
         spi_transaction_t t = {};
-        t.length            = HW_COLS * 16;
+        t.length            = (HW_X_MAX + 1) * 16;
         t.tx_buffer         = zero_buf;
         spi_device_polling_transmit(_spi, &t);
     }
