@@ -50,6 +50,7 @@ private:
     // UI State caching
     std::string _last_state;
     float       _last_mpos[3] = { 0.0f, 0.0f, 0.0f };
+    bool        _is_homed     = false;
 
     std::string _report;
     void        parse_report();

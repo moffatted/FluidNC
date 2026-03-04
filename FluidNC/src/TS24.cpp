@@ -116,6 +116,16 @@ void TS24::parse_status_report() {
             parse_axes(_report.substr(mpos_start, mpos_end - mpos_start), _last_mpos);
         }
     }
+
+    size_t homed_start = _report.find("H:", next);
+    if (homed_start != std::string::npos) {
+        homed_start += 2;
+        if (_report[homed_start] != '0') {
+            _is_homed = true;
+        } else {
+            _is_homed = false;
+        }
+    }
 }
 
 void TS24::parse_axes(std::string s, float* axes) {
@@ -230,9 +240,20 @@ void TS24::render_ui() {
     // Split 320px into three sections: ~104px each
     const uint16_t TOP_BTN_W = 104;
 
+    // Home button color logic
+    uint16_t home_color = ST7789::BLUE;
+    uint16_t home_text  = ST7789::WHITE;
+    if (_last_state == "Home") {
+        home_color = ST7789::YELLOW;
+        home_text  = ST7789::BLACK;
+    } else if (_is_homed) {
+        home_color = ST7789::GREEN;
+        home_text  = ST7789::BLACK;
+    }
+
     // Home
-    _display->fillRect(0, 0, TOP_BTN_W, 40, ST7789::GREEN);
-    _display->setTextColor(ST7789::BLACK, ST7789::GREEN);
+    _display->fillRect(0, 0, TOP_BTN_W, 40, home_color);
+    _display->setTextColor(home_text, home_color);
     _display->drawString(29, 13, "HOME", 2);
 
     // Stop
