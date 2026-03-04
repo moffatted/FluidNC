@@ -59,16 +59,16 @@ bool ST7789::init(Pin* cs_pin, Pin* dc_pin, Pin* reset_pin, Pin* backlight_pin) 
 
     esp_err_t ret = spi_bus_add_device(TS_SPI_HOST, &devcfg, &_spi);
     if (ret != ESP_OK) {
-        log_error("ST7796: spi_bus_add_device failed");
+        log_error("ST7789: spi_bus_add_device failed");
         return false;
     }
-    log_info("ST7796: SPI device added OK");
+    log_info("ST7789: SPI device added OK");
 
     spi_device_acquire_bus(_spi, portMAX_DELAY);
     if (_cs_pin && _cs_pin->defined())
         _cs_pin->off();  // Assert CS
 
-    // ST7796 Initialization - exact sequence from MKS DLC32 firmware User_Setup.h
+    // ST7789/ST7796 Initialization - sequence provided for MKS DLC32 displays
     vTaskDelay(pdMS_TO_TICKS(120));
 
     sendCommand(0x11);  // Sleep Out
