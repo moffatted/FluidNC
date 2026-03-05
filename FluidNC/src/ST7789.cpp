@@ -230,7 +230,7 @@ void ST7789::pushColors(uint16_t* data, uint32_t len) {
     spi_transaction_t t = {};
     t.length            = len * 16;
     t.tx_buffer         = data;
-    spi_device_polling_transmit(_spi, &t);
+    spi_device_transmit(_spi, &t);
 
     if (_cs_pin && _cs_pin->defined())
         _cs_pin->on();
@@ -268,7 +268,7 @@ void ST7789::fillRect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t c
         spi_transaction_t t = {};
         t.length            = w * 16;
         t.tx_buffer         = line_buf;
-        spi_device_polling_transmit(_spi, &t);
+        spi_device_transmit(_spi, &t);
     }
 
     if (_cs_pin && _cs_pin->defined())
@@ -363,7 +363,7 @@ void ST7789::clearHardwareRAM() {
         spi_transaction_t t = {};
         t.length            = (HW_X_MAX + 1) * 16;
         t.tx_buffer         = zero_buf;
-        spi_device_polling_transmit(_spi, &t);
+        spi_device_transmit(_spi, &t);
     }
 
     if (_cs_pin && _cs_pin->defined())
