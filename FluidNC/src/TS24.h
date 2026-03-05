@@ -53,6 +53,8 @@ private:
     std::string _last_state;
     float       _last_mpos[3] = { 0.0f, 0.0f, 0.0f };
     bool        _is_homed     = false;
+    int         _jog_dist_idx = 2;  // 0=0.05, 1=0.1, 2=5, 3=10, 4=100
+    bool        _force_redraw = true;
 
     // FreeRTOS queue for thread-safe command delivery from ui_task to polling loop
     QueueHandle_t    _cmdQueue   = nullptr;

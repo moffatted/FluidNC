@@ -172,7 +172,7 @@ void TS24::render_ui() {
     static std::string prev_state;
     static float       prev_mpos[3] = { -1e9, -1e9, -1e9 };
 
-    bool changed = (prev_state != _last_state);
+    bool changed = (prev_state != _last_state) || _force_redraw;
     for (int i = 0; i < 3; i++) {
         if (fabs(prev_mpos[i] - _last_mpos[i]) > 0.01)
             changed = true;
@@ -181,7 +181,8 @@ void TS24::render_ui() {
     if (!changed)
         return;
 
-    prev_state = _last_state;
+    _force_redraw = false;
+    prev_state    = _last_state;
     memcpy(prev_mpos, _last_mpos, sizeof(prev_mpos));
 
     // Clear entire screen on first render to eliminate any init artifacts
@@ -196,29 +197,45 @@ void TS24::render_ui() {
     const uint16_t H = 240;
 
     // --- Header: State ---
-    _display->fillRect(0, 210, W, 30, ST7789::BLUE);
+    _display->fillRect(0, 215, W, 25, ST7789::BLUE);
     _display->setTextColor(ST7789::WHITE, ST7789::BLUE);
     std::string state_str = _last_state.empty() ? "Idle" : _last_state;
-    _display->drawString(8, 217, state_str.c_str(), 2);
+    _display->drawString(8, 220, state_str.c_str(), 2);
 
     // --- Coord bar ---
-    _display->fillRect(0, 182, W, 28, ST7789::BLACK);
+    _display->fillRect(0, 192, W, 23, ST7789::BLACK);
     _display->setTextColor(ST7789::GREEN, ST7789::BLACK);
     char pos_buf[64];
     snprintf(pos_buf, sizeof(pos_buf), "X:%.2f Y:%.2f Z:%.2f", _last_mpos[0], _last_mpos[1], _last_mpos[2]);
-    _display->drawString(5, 192, pos_buf, 1);
+    _display->drawString(5, 196, pos_buf, 1);
+
+    // --- Distance buttons ---
+    const char*    dist_labels[5] = { ".1", "1", "5", "10", "100" };
+    const uint16_t DIST_W         = 60;
+    const uint16_t DIST_H         = 28;
+    const uint16_t ROW_DIST       = 160;
+
+    for (int i = 0; i < 5; i++) {
+        uint16_t dcol       = 5 + i * (DIST_W + 4);
+        uint16_t color      = (i == _jog_dist_idx) ? ST7789::GREEN : ST7789::GRAY;
+        uint16_t text_color = (i == _jog_dist_idx) ? ST7789::BLACK : ST7789::WHITE;
+        _display->fillRect(dcol, ROW_DIST, DIST_W, DIST_H, color);
+        _display->setTextColor(text_color, color);
+        int offset[] = { 19, 24, 24, 14, 8 };  // Fine-tuned offsets for 2-scale font roughly (~11px per char)
+        _display->drawString(dcol + offset[i], ROW_DIST + 6, dist_labels[i], 2);
+    }
 
     // --- Jog buttons ---
     const uint16_t BTN_W = 60;
-    const uint16_t BTN_H = 35;
+    const uint16_t BTN_H = 34;  // Reduced from 35
     const uint16_t COL1  = 5;
     const uint16_t COL2  = 70;
     const uint16_t COL3  = 135;
     const uint16_t ZCOL  = 220;
 
-    const uint16_t ROW_YP = 61;
-    const uint16_t ROW_X  = 101;
-    const uint16_t ROW_YM = 141;
+    const uint16_t ROW_YP = 45;   // Moved up from 61
+    const uint16_t ROW_X  = 83;   // Moved up from 101
+    const uint16_t ROW_YM = 121;  // Moved up from 141
 
     // Y+
     _display->fillRect(COL2, ROW_YP, BTN_W, BTN_H, ST7789::GRAY);
@@ -308,79 +325,77 @@ void TS24::handle_touch() {
 
     log_info("TS24 TOUCH: raw(" << raw.x << "," << raw.y << "," << raw.z << ") -> screen(" << p.x << "," << p.y << ")");
 
-    // --- Jog acceleration state ---
-    static uint32_t jog_hold_start  = 0;
-    static uint32_t last_jog_time   = 0;
-    static int      last_jog_region = -1;
-
-    // Determine touch region for jog acceleration tracking
+    // Determine touch region for fast response tracking
     int cur_region = -1;
     if (p.y < 45)
-        cur_region = 0;  // Top bar
-    else if (p.y >= 200)
-        cur_region = 1;  // State header
-    else if (p.x < 200) {
-        if (p.y < 98)
+        cur_region = 0;   // Top bar
+    else if (p.y >= 210)  // State header is 215, giving leeway to 210
+        cur_region = 1;   // State header
+    else if (p.y >= 155 && p.y <= 192) {
+        // Distance buttons
+        int btn_idx = (p.x - 5) / 64;  // 64 spacing (60 w + 4 space)
+        if (btn_idx >= 0 && btn_idx < 5) {
+            cur_region = 30 + btn_idx;
+        }
+    } else if (p.x < 200) {
+        if (p.y >= 45 && p.y <= 79)
             cur_region = 10;  // Y+
-        else if (p.y < 140)
-            cur_region = (p.x < 70) ? 11 : (p.x >= 125 ? 12 : -1);
-        else
+        else if (p.y >= 83 && p.y <= 117)
+            cur_region = (p.x < 65) ? 11 : (p.x >= 135 ? 12 : -1);
+        else if (p.y >= 121 && p.y <= 155)
             cur_region = 13;  // Y-
     } else if (p.x >= 210) {
-        if (p.y < 98)
+        if (p.y >= 45 && p.y <= 79)
             cur_region = 20;  // Z+
-        else if (p.y >= 140)
+        else if (p.y >= 121 && p.y <= 155)
             cur_region = 21;  // Z-
-        else if (p.y < 119)
+        else if (p.y >= 83 && p.y < 100)
             cur_region = 22;  // Zero XY
-        else
+        else if (p.y >= 100 && p.y <= 117)
             cur_region = 23;  // Zero Z
     }
 
-    uint32_t now    = millis();
-    bool     is_jog = (cur_region >= 10 && cur_region <= 21);
+    uint32_t now     = millis();
+    bool     is_jog  = (cur_region >= 10 && cur_region <= 21);
+    bool     is_dist = (cur_region >= 30 && cur_region <= 34);
 
-    // Reset hold timer if button changed or touch gap > 400ms
-    if (cur_region != last_jog_region || (now - last_jog_time) > 400) {
-        jog_hold_start = now;
-    }
-    last_jog_region = cur_region;
-
-    // Debounce: 150ms for jog, 300ms for others
-    uint32_t        debounce_ms = is_jog ? 150 : 300;
+    // Debounce
     static uint32_t last_touch  = 0;
+    static int      last_region = -1;
+
+    // Dist buttons act differently—only trigger on new presses or very long hold to avoid flickering
+    if (is_dist && cur_region == last_region && (now - last_touch) < 800) {
+        return;  // Long debounce for dist buttons to prevent rapid toggle spam
+    }
+
+    uint32_t debounce_ms = is_jog ? 150 : 300;
     if (now - last_touch < debounce_ms)
         return;
-    last_touch    = now;
-    last_jog_time = now;
 
-    // Jog distance ramps up with sustained hold
-    uint32_t hold_ms = now - jog_hold_start;
-    int      jog_dist, jog_feed, ramp_level;
-    if (hold_ms > 1500) {
-        jog_dist   = 50;
-        jog_feed   = 5000;
-        ramp_level = 3;
-    } else if (hold_ms > 500) {
-        jog_dist   = 10;
-        jog_feed   = 3000;
-        ramp_level = 2;
-    } else {
-        jog_dist   = 1;
-        jog_feed   = 1000;
-        ramp_level = 1;
+    last_touch  = now;
+    last_region = cur_region;
+
+    if (is_dist) {
+        _jog_dist_idx = cur_region - 30;
+        _force_redraw = true;  // ensure UI will redraw the green highlight
+        log_info("TS24 ACTION: Set Jog Dist to idx " << _jog_dist_idx);
+        return;  // Don't do any other action
     }
-    int z_dist = (jog_dist > 10) ? 10 : jog_dist;
-    int z_feed = (jog_feed > 2000) ? 2000 : jog_feed;
 
-    // Cancel any in-progress jog before sending a new one so the new speed takes effect immediately
-    if (is_jog && ramp_level > 1) {
+    // Determine target distances and feedrates
+    float dists[]  = { 0.1f, 1.0f, 5.0f, 10.0f, 100.0f };
+    float jog_dist = dists[_jog_dist_idx];
+    int   jog_feed = 2000;                                 // Keep a constant reasonable feedrate for manual positioning
+    float z_dist   = jog_dist > 10.0f ? 10.0f : jog_dist;  // Limit Z jog stroke safety
+
+    // Cancel any in-progress jog to be safe when clicking rapidly
+    if (is_jog) {
         execute_realtime_command(Cmd::JogCancel, *this);
     }
 
     // Helper: send command via FreeRTOS queue
-    auto safePush = [this, ramp_level](const char* cmd, const char* label) {
-        log_info("TS24 ACTION: " << label << " [ramp=" << ramp_level << "] -> " << cmd);
+    auto safePush = [this](const char* cmd, const char* label) {
+        log_info("TS24 ACTION: " << label << " -> " << cmd);
         if (_cmdQueue) {
             char buf[CMD_MAX_LEN] = {};
             strncpy(buf, cmd, CMD_MAX_LEN - 1);
@@ -410,30 +425,30 @@ void TS24::handle_touch() {
         }
     }
     // --- Jog area ---
-    else if (p.y >= 45 && p.y < 200) {
+    else if (p.y >= 45 && p.y < 160) {
         char cmd[CMD_MAX_LEN];
         if (p.x < 200) {
-            if (p.y < 98 && p.x >= 60 && p.x < 140) {
-                snprintf(cmd, sizeof(cmd), "$J=G91 Y%d F%d\n", jog_dist, jog_feed);
+            if (p.y < 79 && p.x >= 60 && p.x < 140) {
+                snprintf(cmd, sizeof(cmd), "$J=G91 Y%.2f F%d\n", jog_dist, jog_feed);
                 safePush(cmd, "Y+");
-            } else if (p.y >= 98 && p.y < 140 && p.x >= 0 && p.x < 70) {
-                snprintf(cmd, sizeof(cmd), "$J=G91 X-%d F%d\n", jog_dist, jog_feed);
+            } else if (p.y >= 83 && p.y < 117 && p.x >= 0 && p.x < 70) {
+                snprintf(cmd, sizeof(cmd), "$J=G91 X-%.2f F%d\n", jog_dist, jog_feed);
                 safePush(cmd, "X-");
-            } else if (p.y >= 98 && p.y < 140 && p.x >= 125 && p.x < 200) {
-                snprintf(cmd, sizeof(cmd), "$J=G91 X%d F%d\n", jog_dist, jog_feed);
+            } else if (p.y >= 83 && p.y < 117 && p.x >= 125 && p.x < 200) {
+                snprintf(cmd, sizeof(cmd), "$J=G91 X%.2f F%d\n", jog_dist, jog_feed);
                 safePush(cmd, "X+");
-            } else if (p.y >= 140 && p.x >= 60 && p.x < 140) {
-                snprintf(cmd, sizeof(cmd), "$J=G91 Y-%d F%d\n", jog_dist, jog_feed);
+            } else if (p.y >= 121 && p.x >= 60 && p.x < 140) {
+                snprintf(cmd, sizeof(cmd), "$J=G91 Y-%.2f F%d\n", jog_dist, jog_feed);
                 safePush(cmd, "Y-");
             }
         } else if (p.x >= 210) {
-            if (p.y < 98) {
-                snprintf(cmd, sizeof(cmd), "$J=G91 Z%d F%d\n", z_dist, z_feed);
+            if (p.y < 79) {
+                snprintf(cmd, sizeof(cmd), "$J=G91 Z%.2f F%d\n", z_dist, jog_feed);
                 safePush(cmd, "Z+");
-            } else if (p.y >= 140) {
-                snprintf(cmd, sizeof(cmd), "$J=G91 Z-%d F%d\n", z_dist, z_feed);
+            } else if (p.y >= 121 && p.y <= 155) {
+                snprintf(cmd, sizeof(cmd), "$J=G91 Z-%.2f F%d\n", z_dist, jog_feed);
                 safePush(cmd, "Z-");
-            } else if (p.y < 119) {
+            } else if (p.y < 100) {
                 safePush("G10 L20 P1 X0 Y0\n", "ZERO_XY");
             } else {
                 safePush("G10 L20 P1 Z0\n", "ZERO_Z");
