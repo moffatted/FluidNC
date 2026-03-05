@@ -314,7 +314,7 @@ void TS24::handle_touch() {
     static uint32_t last_log = 0;
     if (millis() - last_log > 2000) {
         last_log = millis();
-        log_info("TS24 POLL: rawX=" << raw.x << " rawY=" << raw.y << " Z=" << raw.z << " touched=" << touched);
+        // log_info("TS24 POLL: rawX=" << raw.x << " rawY=" << raw.y << " Z=" << raw.z << " touched=" << touched);
     }
 
     if (!touched)
@@ -323,7 +323,7 @@ void TS24::handle_touch() {
     // Get point mapped to 320x240 display coordinates
     TouchPoint p = _touch->getPoint(320, 240, 550, 600, 3650, 3450);
 
-    log_info("TS24 TOUCH: raw(" << raw.x << "," << raw.y << "," << raw.z << ") -> screen(" << p.x << "," << p.y << ")");
+    // log_info("TS24 TOUCH: raw(" << raw.x << "," << raw.y << "," << raw.z << ") -> screen(" << p.x << "," << p.y << ")");
 
     // Determine touch region for fast response tracking
     int cur_region = -1;
@@ -378,7 +378,7 @@ void TS24::handle_touch() {
     if (is_dist) {
         _jog_dist_idx = cur_region - 30;
         _force_redraw = true;  // ensure UI will redraw the green highlight
-        log_info("TS24 ACTION: Set Jog Dist to idx " << _jog_dist_idx);
+        // log_info("TS24 ACTION: Set Jog Dist to idx " << _jog_dist_idx);
         return;  // Don't do any other action
     }
 
@@ -395,7 +395,7 @@ void TS24::handle_touch() {
 
     // Helper: send command via FreeRTOS queue
     auto safePush = [this](const char* cmd, const char* label) {
-        log_info("TS24 ACTION: " << label << " -> " << cmd);
+        // log_info("TS24 ACTION: " << label << " -> " << cmd);
         if (_cmdQueue) {
             char buf[CMD_MAX_LEN] = {};
             strncpy(buf, cmd, CMD_MAX_LEN - 1);
@@ -410,7 +410,7 @@ void TS24::handle_touch() {
             safePush("$H\n", "HOME");
         } else if (p.x >= TOP_BTN_W + 4 && p.x < (TOP_BTN_W + 4) * 2) {
             // STOP: call execute_realtime_command directly for immediate effect in all states
-            log_info("TS24 ACTION: STOP (Reset)");
+            // log_info("TS24 ACTION: STOP (Reset)");
             execute_realtime_command(Cmd::Reset, *this);
         } else if (p.x >= (TOP_BTN_W + 4) * 2) {
             if (_last_state.find("Alarm") != std::string::npos) {
